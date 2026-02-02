@@ -1,5 +1,5 @@
 import express from "express";
-import { authenticateToken } from "../middleware/auth.js";
+import { authenticateToken, requireRole } from "../middleware/auth.js";
 import { mockScans, mockResults } from "../data/mockData.js";
 import { v4 as uuidv4 } from "uuid";
 
