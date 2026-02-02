@@ -15,6 +15,7 @@ import PatientUploadPage from "@/pages/patient/PatientUploadPage";
 import PatientScansPage from "@/pages/patient/PatientScansPage";
 import PatientScanDetailPage from "@/pages/patient/PatientScanDetailPage";
 import PatientReportPage from "@/pages/patient/PatientReportPage";
+import PatientReportsPage from "@/pages/patient/PatientReportsPage";
 import PatientProfilePage from "@/pages/patient/PatientProfilePage";
 import UploadPage from "@/pages/UploadPage";
 import ResultsListPage from "@/pages/ResultsListPage";
@@ -68,6 +69,7 @@ const App = () => (
                 <Route path="/patient/upload" element={<PatientUploadPage />} />
                 <Route path="/patient/scans" element={<PatientScansPage />} />
                 <Route path="/patient/scans/:scanId" element={<PatientScanDetailPage />} />
+                <Route path="/patient/reports" element={<PatientReportsPage />} />
                 <Route path="/patient/reports/:scanId" element={<PatientReportPage />} />
                 <Route path="/patient/profile" element={<PatientProfilePage />} />
               </Route>

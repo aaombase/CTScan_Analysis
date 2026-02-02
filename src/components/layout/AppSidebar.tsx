@@ -57,7 +57,7 @@ const patientNavItems: NavItem[] = [
   { title: "Dashboard", href: "/patient/dashboard", icon: LayoutDashboard, roles: ["patient"] },
   { title: "Upload Scan", href: "/patient/upload", icon: Upload, roles: ["patient"] },
   { title: "My Scans", href: "/patient/scans", icon: History, roles: ["patient"] },
-  { title: "My Reports", href: "/patient/dashboard", icon: FileText, roles: ["patient"] },
+  { title: "My Reports", href: "/patient/reports", icon: FileText, roles: ["patient"] },
   { title: "Profile", href: "/patient/profile", icon: User, roles: ["patient"] },
 ];
 
@@ -72,14 +72,14 @@ export function AppSidebar() {
   // Get navigation items based on user role
   const getNavItems = () => {
     if (!user) return { main: [], secondary: [] };
-    
+
     if (user.role === "patient") {
       return {
         main: patientNavItems.filter(item => !item.roles || item.roles.includes(user.role)),
         secondary: [],
       };
     }
-    
+
     return {
       main: doctorNavItems.filter(item => !item.roles || item.roles.includes(user.role)),
       secondary: doctorSecondaryNavItems.filter(item => !item.roles || item.roles.includes(user.role)),
@@ -96,7 +96,7 @@ export function AppSidebar() {
 
   const NavLink = ({ item }: { item: NavItem }) => {
     const active = isActive(item.href);
-    
+
     const linkContent = (
       <Link
         to={item.href}
