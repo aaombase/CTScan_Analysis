@@ -1,6 +1,6 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/toaster.tsx";
+import { Toaster as Sonner } from "@/components/ui/sonner.tsx";
+import { TooltipProvider } from "@/components/ui/tooltip.tsx";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
@@ -47,7 +47,7 @@ const App = () => (
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
               </Route>
-              
+
               {/* Doctor routes */}
               <Route element={<ProtectedRoute allowedRoles={["doctor", "radiologist", "admin"]}><DashboardLayout /></ProtectedRoute>}>
                 <Route path="/doctor/dashboard" element={<DoctorDashboardPage />} />
@@ -89,7 +89,7 @@ const App = () => (
                 <Route path="/research" element={<Navigate to="/doctor/research" replace />} />
                 <Route path="/compliance" element={<Navigate to="/doctor/compliance" replace />} />
               </Route>
-              
+
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
