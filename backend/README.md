@@ -21,6 +21,9 @@ npm run dev
 
 The API will be available at `http://localhost:3001`
 
+The prediction route expects the FastAPI ML service to be running at
+`http://localhost:8000`, or the URL configured by `ML_SERVICE_URL`.
+
 ## API Endpoints
 
 ### Authentication
@@ -32,7 +35,10 @@ The API will be available at `http://localhost:3001`
 ### Scans
 - `GET /api/v1/scans` - List scans (role-based)
 - `GET /api/v1/scans/:id` - Get scan by ID
-- `POST /api/v1/scans/upload` - Upload scan (doctor only)
+- `POST /api/v1/scans/upload` - Upload scan
+
+### Prediction
+- `POST /api/v1/predict` - Upload one image as multipart field `image` and proxy it to FastAPI inference
 
 ### Analysis
 - `POST /api/v1/analysis/analyze/:scanId` - Trigger analysis
@@ -57,7 +63,6 @@ The API will be available at `http://localhost:3001`
 This is a scaffold/mock implementation. In production:
 - Replace mock data with database queries
 - Implement proper file storage (S3, etc.)
-- Add ML model integration
 - Implement proper password hashing
 - Add refresh token rotation
 - Add rate limiting
