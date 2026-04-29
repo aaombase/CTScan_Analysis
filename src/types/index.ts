@@ -54,7 +54,7 @@ export interface Patient {
 
 // Scan Types
 export type ScanStatus = "pending" | "uploading" | "analyzing" | "completed" | "failed";
-export type PredictionResult = "stroke" | "normal";
+export type PredictionResult = "stroke" | "normal" | "bleeding" | "ischemia" | "other";
 
 export interface CTScan {
   id: string;
@@ -204,4 +204,19 @@ export interface ModelInfo {
   architecture: string;
   trainingDataset: string;
   lastUpdated: string;
+}
+
+export interface PredictionResponse {
+  class_index: number | null;
+  predicted_class: string;
+  prediction?: string;
+  confidence: number;
+  probabilities: Record<string, number>;
+  validation?: {
+    label: string;
+    scores: Record<string, number>;
+  };
+  processing_time_ms: number;
+  scan?: CTScan;
+  result?: AnalysisResult;
 }

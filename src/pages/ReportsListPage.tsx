@@ -16,8 +16,10 @@ import { reportService } from "@/services/api";
 import { FileText, Download, Eye, Plus } from "lucide-react";
 import { format } from "date-fns";
 import type { DiagnosticReport } from "@/types";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ReportsListPage() {
+  const { toast } = useToast();
   const { data: reportsData, isLoading } = useQuery({
     queryKey: ["reports"],
     queryFn: () => reportService.getReports(),
@@ -33,6 +35,26 @@ export default function ReportsListPage() {
     };
     const { variant, label } = variants[status];
     return <Badge variant={variant}>{label}</Badge>;
+  };
+
+  const handleDownload = async (report: DiagnosticReport) => {
+    try {
+      const blob = await reportService.downloadReportPdf(report.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${report.reportNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({
+        title: "Download failed",
+        description: error instanceof Error ? error.message : "Could not download report",
+        variant: "destructive",
+      });
+    }
   };
 
   if (isLoading) {
@@ -117,7 +139,7 @@ export default function ReportsListPage() {
                             <Eye className="h-3 w-3" />
                           </Link>
                         </Button>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={() => handleDownload(report)}>
                           <Download className="h-3 w-3" />
                         </Button>
                       </div>

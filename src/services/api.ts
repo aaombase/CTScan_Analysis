@@ -13,6 +13,7 @@ import type {
   ScanFilters,
   Patient,
   ModelInfo,
+  PredictionResponse,
 } from "@/types";
 import {
   mockUsers,
@@ -411,6 +412,27 @@ export const modelService = {
   },
 };
 
+export const predictionService = {
+  async predict(image: File): Promise<ApiResponse<PredictionResponse>> {
+    const formData = new FormData();
+    formData.append("image", image);
+
+    const token = localStorage.getItem("auth_token");
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/predict`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    return handleResponse<PredictionResponse>(response);
+  },
+};
+
 // Export all services
 export const api = {
   auth: authService,
@@ -419,6 +441,7 @@ export const api = {
   report: reportService,
   dashboard: dashboardService,
   model: modelService,
+  prediction: predictionService,
 };
 
 export default api;
