@@ -6,6 +6,7 @@ import scanRoutes from "./routes/scans.js";
 import analysisRoutes from "./routes/analysis.js";
 import reportRoutes from "./routes/reports.js";
 import dashboardRoutes from "./routes/dashboard.js";
+import predictRoutes from "./routes/predict.js";
 
 dotenv.config();
 
@@ -43,6 +44,8 @@ app.use("/api/v1/scans", scanRoutes);
 app.use("/api/v1/analysis", analysisRoutes);
 app.use("/api/v1/reports", reportRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
+app.use("/api/v1/predict", predictRoutes);
+app.use("/api/predict", predictRoutes);
 
 // 404 handler
 app.use((req, res) => {
