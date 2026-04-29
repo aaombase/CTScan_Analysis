@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -10,65 +9,92 @@ import {
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert } from "@/components/ui/alert";
-import { scanService } from "@/services/api";
+import { predictionService, reportService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import { AlertCircle, FileImage, Loader2, Upload, X } from "lucide-react";
+import type { PredictionResponse } from "@/types";
+
+const LOW_CONFIDENCE_THRESHOLD = 0.5;
 
 export default function PatientUploadPage() {
   const [files, setFiles] = useState<File[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const navigate = useNavigate();
+  const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
   const { toast } = useToast();
+
+  const setSelectedImage = (selectedFiles: File[]) => {
+    setFiles(selectedFiles.filter((file) => file.type.startsWith("image/")).slice(0, 1));
+    setPrediction(null);
+  };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    const droppedFiles = Array.from(e.dataTransfer.files).filter((f) =>
-      f.type.startsWith("image/"),
-    );
-    setFiles((prev) => [...prev, ...droppedFiles]);
+    setSelectedImage(Array.from(e.dataTransfer.files));
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles((prev) => [...prev, ...Array.from(e.target.files)]);
+      setSelectedImage(Array.from(e.target.files));
     }
   };
 
-  const removeFile = (index: number) =>
+  const removeFile = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
+    setPrediction(null);
+  };
 
-  const handleSubmit = async () => {
+  const handleAnalyze = async () => {
     if (!files.length) return;
+
     try {
-      setUploading(true);
-      setProgress(20);
-      const uploadRes = await scanService.uploadScanAsPatient(files);
-      setProgress(70);
-
-      // Start mocked analysis automatically so patient can track status
-      try {
-        await scanService.analyzeScan(uploadRes.data.id);
-      } catch {
-        // ok: analysis might be triggered by staff later in real system
-      }
-
+      setAnalyzing(true);
+      setPrediction(null);
+      setProgress(45);
+      const result = await predictionService.predict(files[0]);
       setProgress(100);
-      toast({
-        title: "Scan submitted",
-        description:
-          "Your upload was received. You can track its status in My Scans.",
-      });
-      navigate(`/patient/scans/${uploadRes.data.id}`);
+      setPrediction(result.data);
+
+      if (result.data.predicted_class === "Other") {
+        toast({
+          title: "Not a brain CT scan",
+          description: "The uploaded image was not recognised as a brain CT scan. Please upload a valid CT slice.",
+          variant: "destructive",
+        });
+      } else {
+        if (result.data.scan?.id && result.data.result?.id) {
+          try {
+            const report = await reportService.generateReport(
+              result.data.scan.id,
+              result.data.result.id,
+            );
+            toast({
+              title: "Report generated",
+              description: `${report.data.reportNumber} was created for this scan.`,
+            });
+          } catch {
+            toast({
+              title: "Prediction complete",
+              description: "Result is shown below, but the report could not be generated.",
+              variant: "destructive",
+            });
+          }
+        }
+
+        toast({
+          title: "Analysis complete",
+          description: `${result.data.predicted_class} (${Math.round(result.data.confidence * 100)}% confidence)`,
+        });
+      }
     } catch (error) {
       toast({
-        title: "Upload failed",
+        title: "Analysis failed",
         description:
-          error instanceof Error ? error.message : "Could not submit your scan",
+          error instanceof Error ? error.message : "Could not analyze your scan",
         variant: "destructive",
       });
     } finally {
-      setUploading(false);
+      setAnalyzing(false);
       setProgress(0);
     }
   };
@@ -78,7 +104,7 @@ export default function PatientUploadPage() {
       <div>
         <h1 className="text-3xl font-bold">Upload CT Scan</h1>
         <p className="text-muted-foreground">
-          Submit your scan for clinical review and analysis.
+          Upload one brain CT slice and view the model result here.
         </p>
       </div>
 
@@ -86,10 +112,10 @@ export default function PatientUploadPage() {
         <div className="flex items-start gap-2 text-sm">
           <AlertCircle className="mt-0.5 h-4 w-4" />
           <div>
-            <p className="font-medium">What happens next?</p>
+            <p className="font-medium">Clinical decision support</p>
             <p className="text-muted-foreground">
-              Your scan will be processed and reviewed. Final diagnosis is
-              provided in the report.
+              The model result appears on this page. A qualified clinician should
+              still review the scan before any medical decision.
             </p>
           </div>
         </div>
@@ -97,9 +123,9 @@ export default function PatientUploadPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Upload images</CardTitle>
+          <CardTitle>Upload image</CardTitle>
           <CardDescription>
-            PNG/JPG supported. DICOM support can be added later.
+            Supports one PNG or JPG CT brain slice.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -112,13 +138,12 @@ export default function PatientUploadPage() {
             }
           >
             <Upload className="mb-4 h-10 w-10 text-muted-foreground" />
-            <p className="text-center font-medium">Drag & drop images here</p>
+            <p className="text-center font-medium">Drag & drop a CT image here</p>
             <p className="text-sm text-muted-foreground">or click to browse</p>
             <input
               id="patient-file-input"
               type="file"
               accept="image/*"
-              multiple
               onChange={handleFileSelect}
               className="hidden"
             />
@@ -126,9 +151,7 @@ export default function PatientUploadPage() {
 
           {files.length > 0 && (
             <div className="space-y-2">
-              <p className="text-sm font-medium">
-                {files.length} file(s) selected
-              </p>
+              <p className="text-sm font-medium">Selected image</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {files.map((file, i) => (
                   <div
@@ -150,28 +173,66 @@ export default function PatientUploadPage() {
             </div>
           )}
 
-          {uploading && (
+          {analyzing && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Submitting your scan…</span>
+                <span>Analyzing with the PyTorch model...</span>
               </div>
               <Progress value={progress} />
+            </div>
+          )}
+
+          {prediction && prediction.predicted_class === "Other" && (
+            <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <p className="font-semibold">Not a brain CT scan</p>
+                <p className="mt-1">
+                  The uploaded image was not recognised as a brain CT scan. Please upload a valid axial CT slice of the brain.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {prediction && prediction.predicted_class !== "Other" && (
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <p className="text-sm text-muted-foreground">Diagnosis</p>
+              <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+                <p className="text-2xl font-semibold">
+                  {prediction.predicted_class}
+                </p>
+                <p className="text-sm font-medium">
+                  {Math.round(prediction.confidence * 100)}% confidence
+                </p>
+              </div>
+              {prediction.confidence < LOW_CONFIDENCE_THRESHOLD && (
+                <div className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <p>
+                    Low-confidence result. Upload a clearer CT slice or ask a
+                    clinician to review it.
+                  </p>
+                </div>
+              )}
+              <p className="mt-3 text-xs text-muted-foreground">
+                Processed in {prediction.processing_time_ms} ms
+              </p>
             </div>
           )}
 
           <Button
             className="w-full"
             size="lg"
-            disabled={!files.length || uploading}
-            onClick={handleSubmit}
+            disabled={!files.length || analyzing}
+            onClick={handleAnalyze}
           >
-            {uploading ? (
+            {analyzing ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting…
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing...
               </>
             ) : (
-              "Submit Scan"
+              "Analyze Scan"
             )}
           </Button>
         </CardContent>

@@ -1,58 +1,91 @@
 import { useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { scanService } from "@/services/api";
+import { predictionService, reportService } from "@/services/api";
 import { Upload, X, FileImage, Loader2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import type { PredictionResponse } from "@/types";
+
+const LOW_CONFIDENCE_THRESHOLD = 0.5;
 
 export default function UploadPage() {
   const [files, setFiles] = useState<File[]>([]);
-  const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const navigate = useNavigate();
+  const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
   const { toast } = useToast();
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const droppedFiles = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
-    setFiles(prev => [...prev, ...droppedFiles]);
+    setFiles(droppedFiles.slice(0, 1));
+    setPrediction(null);
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+      setFiles(Array.from(e.target.files).filter(f => f.type.startsWith("image/")).slice(0, 1));
+      setPrediction(null);
     }
   };
 
   const removeFile = (index: number) => {
     setFiles(prev => prev.filter((_, i) => i !== index));
+    setPrediction(null);
   };
 
   const handleAnalyze = async () => {
     if (files.length === 0) return;
     
     try {
-      setUploading(true);
-      setProgress(30);
-      const uploadRes = await scanService.uploadScan(files, "pat_001");
-      
-      setProgress(60);
-      setUploading(false);
       setAnalyzing(true);
-      
-      const result = await scanService.analyzeScan(uploadRes.data.id);
+      setPrediction(null);
+      setProgress(45);
+      const result = await predictionService.predict(files[0]);
       setProgress(100);
-      
-      toast({ title: "Analysis Complete", description: `Result: ${result.data.prediction === "stroke" ? "Stroke Detected" : "Normal"} (${result.data.confidence}% confidence)` });
-      navigate("/results", { state: { result: result.data } });
+      setPrediction(result.data);
+
+      if (result.data.predicted_class === "Other") {
+        toast({
+          title: "Not a brain CT scan",
+          description: "The uploaded image was not recognised as a brain CT scan. Please upload a valid CT slice.",
+          variant: "destructive",
+        });
+      } else {
+        if (result.data.scan?.id && result.data.result?.id) {
+          try {
+            const report = await reportService.generateReport(
+              result.data.scan.id,
+              result.data.result.id,
+            );
+            toast({
+              title: "Report generated",
+              description: `${report.data.reportNumber} was created for this scan.`,
+            });
+          } catch (reportError) {
+            toast({
+              title: "Prediction complete",
+              description: "Result is shown below, but the report could not be generated.",
+              variant: "destructive",
+            });
+          }
+        }
+
+        toast({
+          title: "Prediction complete",
+          description: `${result.data.predicted_class} (${Math.round(result.data.confidence * 100)}% confidence)`,
+        });
+      }
     } catch (error) {
-      toast({ title: "Error", description: "Analysis failed", variant: "destructive" });
+      toast({
+        title: "Analysis failed",
+        description: error instanceof Error ? error.message : "Could not analyze the image",
+        variant: "destructive",
+      });
     } finally {
-      setUploading(false);
       setAnalyzing(false);
+      setProgress(0);
     }
   };
 
@@ -60,13 +93,13 @@ export default function UploadPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Upload CT Scan</h1>
-        <p className="text-muted-foreground">Upload brain CT images for AI-powered stroke detection</p>
+        <p className="text-muted-foreground">Upload one brain CT slice for AI-powered classification</p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Upload Images</CardTitle>
-          <CardDescription>Supports PNG, JPG formats. DICOM support coming soon.</CardDescription>
+          <CardDescription>Supports a single PNG or JPG image. DICOM support can be added later.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Drop Zone */}
@@ -77,15 +110,15 @@ export default function UploadPage() {
             onClick={() => document.getElementById("file-input")?.click()}
           >
             <Upload className="mb-4 h-10 w-10 text-muted-foreground" />
-            <p className="text-center font-medium">Drag & drop CT images here</p>
+            <p className="text-center font-medium">Drag & drop a CT image here</p>
             <p className="text-sm text-muted-foreground">or click to browse</p>
-            <input id="file-input" type="file" accept="image/*" multiple onChange={handleFileSelect} className="hidden" />
+            <input id="file-input" type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
           </div>
 
           {/* File List */}
           {files.length > 0 && (
             <div className="space-y-2">
-              <p className="text-sm font-medium">{files.length} file(s) selected</p>
+              <p className="text-sm font-medium">Selected image</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {files.map((file, i) => (
                   <div key={i} className="flex items-center gap-3 rounded-lg border p-3">
@@ -99,13 +132,48 @@ export default function UploadPage() {
           )}
 
           {/* Progress */}
-          {(uploading || analyzing) && (
+          {analyzing && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">{uploading ? "Uploading..." : "Analyzing with CNN-GA-BiLSTM model..."}</span>
+                <span className="text-sm">Analyzing with the PyTorch model...</span>
               </div>
               <Progress value={progress} />
+            </div>
+          )}
+
+          {prediction && prediction.predicted_class === "Other" && (
+            <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <p className="font-semibold">Not a brain CT scan</p>
+                <p className="mt-1">
+                  The uploaded image was not recognised as a brain CT scan. Please upload a valid axial CT slice of the brain.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {prediction && prediction.predicted_class !== "Other" && (
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <p className="text-sm text-muted-foreground">Diagnosis</p>
+              <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+                <p className="text-2xl font-semibold">{prediction.predicted_class}</p>
+                <p className="text-sm font-medium">
+                  {Math.round(prediction.confidence * 100)}% confidence
+                </p>
+              </div>
+              {prediction.confidence < LOW_CONFIDENCE_THRESHOLD && (
+                <div className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <p>
+                    Low-confidence result. Check that the model weights and preprocessing match the original training code.
+                  </p>
+                </div>
+              )}
+              <p className="mt-3 text-xs text-muted-foreground">
+                Processed in {prediction.processing_time_ms} ms
+              </p>
             </div>
           )}
 
@@ -115,7 +183,7 @@ export default function UploadPage() {
             <p>This AI tool is for clinical decision support only. All results must be verified by a qualified radiologist.</p>
           </div>
 
-          <Button onClick={handleAnalyze} disabled={files.length === 0 || uploading || analyzing} className="w-full" size="lg">
+          <Button onClick={handleAnalyze} disabled={files.length === 0 || analyzing} className="w-full" size="lg">
             {analyzing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing...</> : "Analyze Scan"}
           </Button>
         </CardContent>
