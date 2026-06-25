@@ -1,7 +1,11 @@
 import express from "express";
 import { authenticateToken, requireRole } from "../middleware/auth.js";
-import { mockReports, mockScans, mockResults, mockPatients } from "../data/mockData.js";
 import { v4 as uuidv4 } from "uuid";
+import User from "../models/User.js";
+import Patient from "../models/Patient.js";
+import Scan from "../models/Scan.js";
+import AnalysisResult from "../models/AnalysisResult.js";
+import Report from "../models/Report.js";
 
 const router = express.Router();
 
@@ -36,105 +40,151 @@ const diagnosisText = {
 const getDiagnosisCopy = (prediction = "normal") =>
   diagnosisText[String(prediction).toLowerCase()] || diagnosisText.normal;
 
-const escapePdfText = (value = "") =>
-  String(value).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+const objectId = (value) => value?._id || value;
+
+import PDFDocument from "pdfkit";
 
 const createReportPdf = ({ report, scan, result, patient }) => {
-  const confidence =
-    result?.confidence <= 1
-      ? `${(result.confidence * 100).toFixed(1)}%`
-      : `${Number(result?.confidence || 0).toFixed(1)}%`;
-  const lines = [
-    "CT Scan Analysis Report",
-    `Report Number: ${report.reportNumber}`,
-    `Generated: ${new Date(report.generatedAt).toLocaleString()}`,
-    "",
-    `Patient: ${patient ? `${patient.firstName} ${patient.lastName}` : "N/A"}`,
-    `Patient ID: ${patient?.patientId || report.patientId}`,
-    `Scan ID: ${scan?.id || report.scanId}`,
-    "",
-    `AI Diagnosis: ${String(result?.prediction || "N/A").toUpperCase()}`,
-    `Confidence: ${confidence}`,
-    `Model: ${result?.modelName || "EfficientNet-B0 + BiLSTM"}`,
-    "",
-    `Findings: ${report.findings}`,
-    `Impression: ${report.impression}`,
-    `Recommendations: ${report.recommendations}`,
-    "",
-    "Medical Disclaimer: This AI-generated report supports clinical review and does not replace a qualified radiologist or physician.",
-  ];
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 50 });
+      const buffers = [];
+      doc.on("data", buffers.push.bind(buffers));
+      doc.on("end", () => {
+        const pdfData = Buffer.concat(buffers);
+        resolve(pdfData);
+      });
 
-  const text = lines
-    .map((line, index) => `BT /F1 11 Tf 50 ${760 - index * 22} Td (${escapePdfText(line)}) Tj ET`)
-    .join("\n");
-  const stream = Buffer.from(text, "utf-8");
-  const objects = [
-    "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n",
-    "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n",
-    "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n",
-    "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n",
-    `5 0 obj << /Length ${stream.length} >> stream\n${text}\nendstream endobj\n`,
-  ];
+      const confidence =
+        result?.confidence <= 1
+          ? `${(result.confidence * 100).toFixed(1)}%`
+          : `${Number(result?.confidence || 0).toFixed(1)}%`;
 
-  let offset = "%PDF-1.4\n".length;
-  const xref = ["0000000000 65535 f \n"];
-  const body = objects
-    .map((object) => {
-      xref.push(`${String(offset).padStart(10, "0")} 00000 n \n`);
-      offset += Buffer.byteLength(object);
-      return object;
-    })
-    .join("");
-  const xrefStart = offset;
+      // Header
+      doc.fontSize(20).text("CT Scan Analysis Report", { align: "center" });
+      doc.moveDown();
+      doc.fontSize(12).text(`Report Number: ${report.reportNumber}`);
+      doc.text(`Generated: ${new Date(report.generatedAt).toLocaleString()}`);
+      doc.moveDown();
 
-  return Buffer.from(
-    `%PDF-1.4\n${body}xref\n0 ${objects.length + 1}\n${xref.join("")}trailer << /Size ${
-      objects.length + 1
-    } /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`,
-    "utf-8"
-  );
+      // Patient Info
+      doc.fontSize(14).text("Patient Information", { underline: true });
+      doc.fontSize(12).text(`Name: ${patient ? `${patient.firstName} ${patient.lastName}` : "N/A"}`);
+      doc.text(`Patient ID: ${patient?.patientId || report.patientId}`);
+      doc.text(`Scan ID: ${scan?._id || report.scanId}`);
+      doc.moveDown();
+
+      // Analysis Results
+      doc.fontSize(14).text("AI Analysis Results", { underline: true });
+      doc.fontSize(12).text(`Diagnosis: ${String(result?.prediction || "N/A").toUpperCase()}`);
+      doc.text(`Confidence: ${confidence}`);
+      doc.text(`Model: ${result?.modelName || "EfficientNet-B0 + BiLSTM"}`);
+      doc.moveDown();
+
+      // Clinical Details
+      doc.fontSize(14).text("Clinical Details", { underline: true });
+      doc.fontSize(12).text("Findings:");
+      doc.text(report.findings, { indent: 20 });
+      doc.moveDown();
+      doc.text("Impression:");
+      doc.text(report.impression, { indent: 20 });
+      doc.moveDown();
+      doc.text("Recommendations:");
+      doc.text(report.recommendations, { indent: 20 });
+      doc.moveDown(2);
+
+      // Footer
+      doc.fontSize(10).fillColor("gray")
+         .text("Medical Disclaimer: This AI-generated report supports clinical review and does not replace a qualified radiologist or physician.", 
+               { align: "center", width: 500 });
+
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
+
+// Helper function to map database objects for frontend compatibility
+const mapReport = (report) => {
+  if (!report) return null;
+  const reportObj = report.toObject();
+  reportObj.id = reportObj._id;
+  
+  if (reportObj.scanId) {
+    const scanId = objectId(reportObj.scanId);
+    if (typeof reportObj.scanId === "object") {
+      reportObj.scan = reportObj.scanId;
+      reportObj.scan.id = scanId;
+    }
+    reportObj.scanId = scanId;
+  }
+  if (reportObj.resultId) {
+    const resultId = objectId(reportObj.resultId);
+    if (typeof reportObj.resultId === "object") {
+      reportObj.result = reportObj.resultId;
+      reportObj.result.id = resultId;
+    }
+    reportObj.resultId = resultId;
+  }
+  if (reportObj.patientId) {
+    const patientId = objectId(reportObj.patientId);
+    if (typeof reportObj.patientId === "object") {
+      reportObj.patient = reportObj.patientId;
+      reportObj.patient.id = patientId;
+    }
+    reportObj.patientId = patientId;
+  }
+  
+  return reportObj;
 };
 
 /**
  * GET /api/v1/reports
- * List reports (role-based filtering)
+ * List reports (role-based filtering with database)
  */
 router.get("/", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    let filteredReports = [...mockReports];
+    let filter = {};
 
     // Role-based filtering
     if (userRole === "patient") {
-      // Patients see only their own reports
-      const patient = req.user.patientId 
-        ? mockPatients.find((p) => p.id === req.user.patientId)
-        : mockPatients.find((p) => p.email === req.user.email);
-      if (patient) {
-        filteredReports = filteredReports.filter((r) => r.patientId === patient.id);
+      let patient = null;
+      if (req.user.patientId) {
+        patient = await Patient.findById(req.user.patientId);
       } else {
-        filteredReports = [];
+        patient = await Patient.findOne({ email: req.user.email.toLowerCase().trim() });
+      }
+
+      if (patient) {
+        filter.patientId = patient._id;
+      } else {
+        return res.json({
+          success: true,
+          data: [],
+        });
       }
     } else {
       // Doctors see reports for scans they uploaded
-      const doctorScans = mockScans.filter((s) => s.uploadedBy === userId);
-      const doctorScanIds = doctorScans.map((s) => s.id);
-      filteredReports = filteredReports.filter((r) => doctorScanIds.includes(r.scanId));
+      const doctorScans = await Scan.find({ uploadedBy: userId });
+      const doctorScanIds = doctorScans.map((s) => s._id);
+      filter.scanId = { $in: doctorScanIds };
     }
 
-    // Populate related data
-    const reportsWithData = filteredReports.map((report) => ({
-      ...report,
-      scan: mockScans.find((s) => s.id === report.scanId),
-      result: mockResults.find((r) => r.id === report.resultId),
-      patient: mockPatients.find((p) => p.id === report.patientId),
-    }));
+    const reports = await Report.find(filter)
+      .sort({ createdAt: -1 })
+      .populate("scanId")
+      .populate("resultId")
+      .populate("patientId");
+
+    const mappedReports = reports.map(mapReport);
 
     res.json({
       success: true,
-      data: reportsWithData,
+      data: mappedReports,
     });
   } catch (error) {
     console.error("Get reports error:", error);
@@ -155,7 +205,10 @@ router.get("/scan/:scanId", authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const report = mockReports.find((r) => r.scanId === scanId);
+    const report = await Report.findOne({ scanId })
+      .populate("scanId")
+      .populate("resultId")
+      .populate("patientId");
 
     if (!report) {
       return res.status(404).json({
@@ -166,17 +219,21 @@ router.get("/scan/:scanId", authenticateToken, async (req, res) => {
 
     // Role-based access control
     if (userRole === "patient") {
-      const patient = req.user.patientId
-        ? mockPatients.find((p) => p.id === req.user.patientId)
-        : mockPatients.find((p) => p.email === req.user.email);
-      if (report.patientId !== patient?.id) {
+      let patient = null;
+      if (req.user.patientId) {
+        patient = await Patient.findById(req.user.patientId);
+      } else {
+        patient = await Patient.findOne({ email: req.user.email.toLowerCase().trim() });
+      }
+
+      if (objectId(report.patientId) !== patient?._id) {
         return res.status(403).json({
           success: false,
           error: "Access denied",
         });
       }
     } else {
-      const scan = mockScans.find((s) => s.id === scanId);
+      const scan = await Scan.findById(scanId);
       if (scan?.uploadedBy !== userId) {
         return res.status(403).json({
           success: false,
@@ -185,16 +242,9 @@ router.get("/scan/:scanId", authenticateToken, async (req, res) => {
       }
     }
 
-    const reportWithData = {
-      ...report,
-      scan: mockScans.find((s) => s.id === report.scanId),
-      result: mockResults.find((r) => r.id === report.resultId),
-      patient: mockPatients.find((p) => p.id === report.patientId),
-    };
-
     res.json({
       success: true,
-      data: reportWithData,
+      data: mapReport(report),
     });
   } catch (error) {
     console.error("Get report by scan error:", error);
@@ -207,7 +257,7 @@ router.get("/scan/:scanId", authenticateToken, async (req, res) => {
 
 /**
  * GET /api/v1/reports/:id/pdf
- * Download report PDF (mock)
+ * Download report PDF
  */
 router.get("/:id/pdf", authenticateToken, async (req, res) => {
   try {
@@ -215,7 +265,10 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const report = mockReports.find((r) => r.id === id);
+    const report = await Report.findById(id)
+      .populate("scanId")
+      .populate("resultId")
+      .populate("patientId");
 
     if (!report) {
       return res.status(404).json({
@@ -226,17 +279,21 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
 
     // Role-based access control
     if (userRole === "patient") {
-      const patient = req.user.patientId
-        ? mockPatients.find((p) => p.id === req.user.patientId)
-        : mockPatients.find((p) => p.email === req.user.email);
-      if (report.patientId !== patient?.id) {
+      let patient = null;
+      if (req.user.patientId) {
+        patient = await Patient.findById(req.user.patientId);
+      } else {
+        patient = await Patient.findOne({ email: req.user.email.toLowerCase().trim() });
+      }
+
+      if (objectId(report.patientId) !== patient?._id) {
         return res.status(403).json({
           success: false,
           error: "Access denied",
         });
       }
     } else {
-      const scan = mockScans.find((s) => s.id === report.scanId);
+      const scan = await Scan.findById(objectId(report.scanId));
       if (scan?.uploadedBy !== userId) {
         return res.status(403).json({
           success: false,
@@ -245,15 +302,17 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
       }
     }
 
-    const scan = mockScans.find((s) => s.id === report.scanId);
-    const result = mockResults.find((r) => r.id === report.resultId);
-    const patient = mockPatients.find((p) => p.id === report.patientId);
-    const pdf = createReportPdf({ report, scan, result, patient });
+    const pdf = await createReportPdf({
+      report,
+      scan: report.scanId,
+      result: report.resultId,
+      patient: report.patientId,
+    });
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="${report.reportNumber || "report"}-${report.id}.pdf"`
+      `attachment; filename="${report.reportNumber || "report"}-${report._id}.pdf"`
     );
     res.send(pdf);
   } catch (error) {
@@ -275,7 +334,10 @@ router.get("/:id", authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const report = mockReports.find((r) => r.id === id);
+    const report = await Report.findById(id)
+      .populate("scanId")
+      .populate("resultId")
+      .populate("patientId");
 
     if (!report) {
       return res.status(404).json({
@@ -286,17 +348,21 @@ router.get("/:id", authenticateToken, async (req, res) => {
 
     // Role-based access control
     if (userRole === "patient") {
-      const patient = req.user.patientId
-        ? mockPatients.find((p) => p.id === req.user.patientId)
-        : mockPatients.find((p) => p.email === req.user.email);
-      if (report.patientId !== patient?.id) {
+      let patient = null;
+      if (req.user.patientId) {
+        patient = await Patient.findById(req.user.patientId);
+      } else {
+        patient = await Patient.findOne({ email: req.user.email.toLowerCase().trim() });
+      }
+
+      if (objectId(report.patientId) !== patient?._id) {
         return res.status(403).json({
           success: false,
           error: "Access denied",
         });
       }
     } else {
-      const scan = mockScans.find((s) => s.id === report.scanId);
+      const scan = await Scan.findById(objectId(report.scanId));
       if (scan?.uploadedBy !== userId) {
         return res.status(403).json({
           success: false,
@@ -305,16 +371,9 @@ router.get("/:id", authenticateToken, async (req, res) => {
       }
     }
 
-    const reportWithData = {
-      ...report,
-      scan: mockScans.find((s) => s.id === report.scanId),
-      result: mockResults.find((r) => r.id === report.resultId),
-      patient: mockPatients.find((p) => p.id === report.patientId),
-    };
-
     res.json({
       success: true,
-      data: reportWithData,
+      data: mapReport(report),
     });
   } catch (error) {
     console.error("Get report error:", error);
@@ -340,8 +399,8 @@ router.post("/generate", authenticateToken, requireRole("doctor", "radiologist",
       });
     }
 
-    const scan = mockScans.find((s) => s.id === scanId);
-    const result = mockResults.find((r) => r.id === resultId);
+    const scan = await Scan.findById(scanId);
+    const result = await AnalysisResult.findById(resultId);
 
     if (!scan || !result) {
       return res.status(404).json({
@@ -351,7 +410,7 @@ router.post("/generate", authenticateToken, requireRole("doctor", "radiologist",
     }
 
     // Check if report already exists
-    const existingReport = mockReports.find((r) => r.scanId === scanId);
+    const existingReport = await Report.findOne({ scanId });
     if (existingReport) {
       return res.status(409).json({
         success: false,
@@ -360,33 +419,33 @@ router.post("/generate", authenticateToken, requireRole("doctor", "radiologist",
     }
 
     const copy = getDiagnosisCopy(result.prediction);
-    const report = {
-      id: `report_${uuidv4().split("-")[0]}`,
+    const reportCount = await Report.countDocuments();
+    const reportNumber = `RPT-${new Date().getFullYear()}-${String(reportCount + 1).padStart(4, "0")}`;
+
+    const report = new Report({
       scanId,
       resultId,
       patientId: scan.patientId,
-      reportNumber: `RPT-${new Date().getFullYear()}-${String(mockReports.length + 1).padStart(4, "0")}`,
-      generatedAt: new Date().toISOString(),
+      reportNumber,
+      generatedAt: new Date(),
       generatedBy: req.user.id,
       findings: copy.finding,
       impression: copy.impression,
       recommendations: copy.recommendations,
       status: "draft",
       pdfUrl: `/reports/report_${uuidv4().split("-")[0]}.pdf`,
-    };
+    });
 
-    mockReports.push(report);
+    await report.save();
 
-    const reportWithData = {
-      ...report,
-      scan,
-      result,
-      patient: mockPatients.find((p) => p.id === scan.patientId),
-    };
+    const populatedReport = await Report.findById(report._id)
+      .populate("scanId")
+      .populate("resultId")
+      .populate("patientId");
 
     res.status(201).json({
       success: true,
-      data: reportWithData,
+      data: mapReport(populatedReport),
     });
   } catch (error) {
     console.error("Generate report error:", error);

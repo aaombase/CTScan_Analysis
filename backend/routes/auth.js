@@ -1,8 +1,8 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import { v4 as uuidv4 } from "uuid";
-import { mockUsers, mockPatients } from "../data/mockData.js";
+import User from "../models/User.js";
+import Patient from "../models/Patient.js";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
@@ -23,8 +23,8 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Find user (in production, query database)
-    const user = mockUsers.find((u) => u.email === email);
+    // Find user in database
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -32,10 +32,10 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Verify password (in production, use bcrypt.compare)
-    // For mock: accept any password
-    if (password !== "password123" && !password.startsWith("$2a$")) {
-      // Simple mock check - in production, use bcrypt.compare(user.password, password)
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
       return res.status(401).json({
         success: false,
         error: "Invalid email or password",
@@ -43,26 +43,32 @@ router.post("/login", async (req, res) => {
     }
 
     // Generate JWT token
-    const token = jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-      },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
+    const tokenPayload = {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+    };
 
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = user;
+    if (user.patientId) {
+      tokenPayload.patientId = user.patientId;
+    }
+
+    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+
+    // Return user details without password
+    const userObj = user.toObject();
+    delete userObj.password;
+
+    // Map _id to id for frontend compatibility
+    userObj.id = userObj._id;
 
     res.json({
       success: true,
       data: {
-        user: userWithoutPassword,
+        user: userObj,
         accessToken: token,
-        refreshToken: `refresh_${token}`, // In production, generate proper refresh token
-        expiresIn: 24 * 60 * 60, // 24 hours in seconds
+        refreshToken: `refresh_${token}`,
+        expiresIn: 24 * 60 * 60,
       },
     });
   } catch (error) {
@@ -99,60 +105,58 @@ router.post("/register", async (req, res) => {
     }
 
     // Check if email exists
-    if (mockUsers.some((u) => u.email === email)) {
+    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    if (existingUser) {
       return res.status(409).json({
         success: false,
         error: "Email already registered",
       });
     }
 
-    // Hash password (in production)
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
-    const newUser = {
-      id: `usr_${uuidv4().split("-")[0]}`,
-      email,
+    // Create user object
+    const userObj = {
+      email: email.toLowerCase().trim(),
       password: hashedPassword,
       firstName,
       lastName,
       role,
       department: role !== "patient" ? department : undefined,
       specialization: role !== "patient" ? specialization : undefined,
-      createdAt: new Date().toISOString(),
-      lastLogin: new Date().toISOString(),
     };
 
-    // If patient, create patient record
+    // If patient, create patient record first
     let patientId = null;
     if (role === "patient") {
-      const newPatient = {
-        id: `pat_${uuidv4().split("-")[0]}`,
-        patientId: `P-2025-${String(mockPatients.length + 1).padStart(4, "0")}`,
+      const patientCount = await Patient.countDocuments();
+      const formattedSeq = String(patientCount + 1).padStart(4, "0");
+      
+      const newPatient = new Patient({
+        patientId: `P-2025-${formattedSeq}`,
         firstName,
         lastName,
         dateOfBirth: dateOfBirth || new Date().toISOString().split("T")[0],
         gender: gender || "other",
-        email,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      mockPatients.push(newPatient);
-      patientId = newPatient.id;
-      newUser.patientId = patientId;
+        email: email.toLowerCase().trim(),
+      });
+
+      await newPatient.save();
+      patientId = newPatient._id;
+      userObj.patientId = patientId;
     }
 
-    // Add to mock users (in production, save to database)
-    mockUsers.push(newUser);
+    const newUser = new User(userObj);
+    await newUser.save();
 
     // Generate JWT token
     const tokenPayload = {
-      id: newUser.id,
+      id: newUser._id,
       email: newUser.email,
       role: newUser.role,
     };
     
-    // Include patientId in token if user is a patient
     if (newUser.patientId) {
       tokenPayload.patientId = newUser.patientId;
     }
@@ -160,12 +164,14 @@ router.post("/register", async (req, res) => {
     const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     // Remove password from response
-    const { password: _, ...userWithoutPassword } = newUser;
+    const newUserObj = newUser.toObject();
+    delete newUserObj.password;
+    newUserObj.id = newUserObj._id;
 
     res.status(201).json({
       success: true,
       data: {
-        user: userWithoutPassword,
+        user: newUserObj,
         accessToken: token,
         refreshToken: `refresh_${token}`,
         expiresIn: 24 * 60 * 60,
@@ -182,10 +188,9 @@ router.post("/register", async (req, res) => {
 
 /**
  * POST /api/v1/auth/logout
- * Logout user (client-side token removal)
+ * Logout user
  */
 router.post("/logout", (req, res) => {
-  // In production, invalidate refresh token
   res.json({
     success: true,
     message: "Logged out successfully",
@@ -209,7 +214,7 @@ router.get("/me", async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = mockUsers.find((u) => u.id === decoded.id);
+    const user = await User.findById(decoded.id);
 
     if (!user) {
       return res.status(404).json({
@@ -218,11 +223,13 @@ router.get("/me", async (req, res) => {
       });
     }
 
-    const { password: _, ...userWithoutPassword } = user;
+    const userObj = user.toObject();
+    delete userObj.password;
+    userObj.id = userObj._id;
 
     res.json({
       success: true,
-      data: userWithoutPassword,
+      data: userObj,
     });
   } catch (error) {
     res.status(401).json({

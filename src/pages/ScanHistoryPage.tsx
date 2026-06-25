@@ -42,33 +42,37 @@ export default function ScanHistoryPage() {
   };
 
   const getResultBadge = (prediction?: PredictionResult) => {
-    if (!prediction) return <span className="text-muted-foreground">—</span>;
-    return prediction === "stroke" 
-      ? <Badge variant="destructive">Stroke</Badge>
+    if (!prediction) return <span className="text-muted-foreground">-</span>;
+    const abnormal = prediction === "stroke" || prediction === "bleeding" || prediction === "ischemia";
+    return abnormal
+      ? <Badge variant="destructive" className="capitalize">{prediction}</Badge>
       : <Badge className="bg-green-500 hover:bg-green-600">Normal</Badge>;
+  };
+
+  const formatConfidence = (confidence?: number) => {
+    if (confidence == null) return "-";
+    return confidence <= 1 ? `${(confidence * 100).toFixed(1)}%` : `${confidence.toFixed(1)}%`;
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Scan History</h1>
-          <p className="text-muted-foreground">View and manage all CT scan records</p>
+          <p className="text-muted-foreground">MongoDB scan records created after upload and analysis</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => refetch()}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
-          <Button onClick={() => navigate("/upload")}>
+          <Button onClick={() => navigate("/doctor/upload")}>
             <Upload className="mr-2 h-4 w-4" />
             New Scan
           </Button>
         </div>
       </div>
 
-      {/* Filters */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -105,7 +109,8 @@ export default function ScanHistoryPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Results</SelectItem>
-                <SelectItem value="stroke">Stroke Detected</SelectItem>
+                <SelectItem value="bleeding">Bleeding</SelectItem>
+                <SelectItem value="ischemia">Ischemia</SelectItem>
                 <SelectItem value="normal">Normal</SelectItem>
               </SelectContent>
             </Select>
@@ -113,7 +118,6 @@ export default function ScanHistoryPage() {
         </CardContent>
       </Card>
 
-      {/* Scans Table */}
       <Card>
         <CardHeader>
           <CardTitle>Scan Records</CardTitle>
@@ -130,8 +134,8 @@ export default function ScanHistoryPage() {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold">No scans found</h3>
-              <p className="text-muted-foreground mt-1">No scans match your current filters</p>
-              <Button className="mt-4" onClick={() => navigate("/upload")}>
+              <p className="text-muted-foreground mt-1">Upload a scan to create MongoDB scan and result records.</p>
+              <Button className="mt-4" onClick={() => navigate("/doctor/upload")}>
                 <Upload className="mr-2 h-4 w-4" />
                 Upload New Scan
               </Button>
@@ -161,24 +165,18 @@ export default function ScanHistoryPage() {
                     <TableCell>{new Date(scan.scanDate).toLocaleDateString()}</TableCell>
                     <TableCell>{scan.sliceCount}</TableCell>
                     <TableCell>{getStatusBadge(scan.status)}</TableCell>
-                    <TableCell>
-                      {scan.status === "completed" ? getResultBadge(
-                        scan.id.charCodeAt(0) % 3 === 0 ? "stroke" : "normal"
-                      ) : "—"}
-                    </TableCell>
+                    <TableCell>{scan.status === "completed" ? getResultBadge(scan.result?.prediction) : "-"}</TableCell>
                     <TableCell>
                       {scan.status === "completed" ? (
-                        <span className="font-medium">
-                          {(85 + Math.random() * 12).toFixed(1)}%
-                        </span>
-                      ) : "—"}
+                        <span className="font-medium">{formatConfidence(scan.result?.confidence)}</span>
+                      ) : "-"}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => navigate(`/results/${scan.id}`)}
+                          onClick={() => navigate(`/doctor/results/${scan.id}`)}
                           disabled={scan.status !== "completed"}
                         >
                           <Eye className="h-4 w-4" />
@@ -186,7 +184,7 @@ export default function ScanHistoryPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => navigate(`/xai/${scan.id}`)}
+                          onClick={() => navigate(`/doctor/xai/${scan.id}`)}
                           disabled={scan.status !== "completed"}
                         >
                           <Brain className="h-4 w-4" />
@@ -194,7 +192,7 @@ export default function ScanHistoryPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => navigate(`/report/${scan.id}`)}
+                          onClick={() => navigate(`/doctor/report/${scan.id}`)}
                           disabled={scan.status !== "completed"}
                         >
                           <FileText className="h-4 w-4" />

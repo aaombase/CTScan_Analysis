@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { scanService } from "@/services/api";
+import { assetUrl, scanService } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -36,6 +36,16 @@ export default function XAIVisualizationPage() {
   }
 
   const analysisResult = result?.data;
+  const originalImage = assetUrl(analysisResult?.scan?.imageUrls?.[0]);
+  const heatmapImage = assetUrl(analysisResult?.heatmapUrl || analysisResult?.scan?.imageUrls?.[0]);
+  const overlayImage = assetUrl(analysisResult?.overlayUrl || analysisResult?.scan?.imageUrls?.[0]);
+  const abnormal =
+    analysisResult?.prediction === "stroke" ||
+    analysisResult?.prediction === "bleeding" ||
+    analysisResult?.prediction === "ischemia";
+  const confidence = analysisResult?.confidence;
+  const confidenceText =
+    confidence == null ? "-" : confidence <= 1 ? `${(confidence * 100).toFixed(1)}%` : `${confidence.toFixed(1)}%`;
 
   return (
     <div className="space-y-6">
@@ -130,7 +140,7 @@ export default function XAIVisualizationPage() {
                       style={{ transform: `scale(${zoom})`, transformOrigin: "center" }}
                     >
                       <img
-                        src="/placeholder.svg"
+                        src={originalImage}
                         alt="Original CT Scan"
                         className="h-[400px] w-auto object-contain"
                       />
@@ -143,7 +153,7 @@ export default function XAIVisualizationPage() {
                     >
                       <div className="relative h-[400px] w-auto">
                         <img
-                          src="/placeholder.svg"
+                          src={heatmapImage}
                           alt="Grad-CAM Heatmap"
                           className="h-full w-auto object-contain"
                           style={{ filter: "hue-rotate(180deg) saturate(2)" }}
@@ -159,7 +169,7 @@ export default function XAIVisualizationPage() {
                     >
                       <div className="relative h-[400px] w-auto">
                         <img
-                          src="/placeholder.svg"
+                          src={overlayImage}
                           alt="Overlay View"
                           className="h-full w-auto object-contain opacity-70"
                         />
@@ -196,13 +206,13 @@ export default function XAIVisualizationPage() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Result</span>
-                <Badge variant={analysisResult?.prediction === "stroke" ? "destructive" : "default"}>
-                  {analysisResult?.prediction === "stroke" ? "Stroke Detected" : "Normal"}
+                <Badge variant={abnormal ? "destructive" : "default"} className="capitalize">
+                  {analysisResult?.prediction || "Unknown"}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Confidence</span>
-                <span className="font-semibold">{((analysisResult?.confidence || 0) * 100).toFixed(1)}%</span>
+                <span className="font-semibold">{confidenceText}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Model</span>
@@ -218,26 +228,15 @@ export default function XAIVisualizationPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {analysisResult?.affectedRegions?.map((region, index) => (
+                {analysisResult?.affectedRegions?.length ? analysisResult.affectedRegions.map((region, index) => (
                   <div key={index} className="flex items-center justify-between rounded-lg border p-3">
                     <span className="text-sm font-medium">{region.name}</span>
                     <Badge variant="outline">{(region.confidence * 100).toFixed(0)}%</Badge>
                   </div>
-                )) || (
-                  <>
-                    <div className="flex items-center justify-between rounded-lg border p-3">
-                      <span className="text-sm font-medium">Left Hemisphere</span>
-                      <Badge variant="outline">87%</Badge>
-                    </div>
-                    <div className="flex items-center justify-between rounded-lg border p-3">
-                      <span className="text-sm font-medium">Frontal Lobe</span>
-                      <Badge variant="outline">72%</Badge>
-                    </div>
-                    <div className="flex items-center justify-between rounded-lg border p-3">
-                      <span className="text-sm font-medium">Temporal Region</span>
-                      <Badge variant="outline">45%</Badge>
-                    </div>
-                  </>
+                )) : (
+                  <p className="text-sm text-muted-foreground">
+                    No region-level XAI metadata was saved for this result.
+                  </p>
                 )}
               </div>
             </CardContent>

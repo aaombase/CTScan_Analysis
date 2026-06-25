@@ -22,6 +22,12 @@ export default function PatientReportPage() {
 
   const report = data?.data;
   const result = report?.result;
+  const confidence =
+    result?.confidence == null
+      ? null
+      : result.confidence <= 1
+        ? `${(result.confidence * 100).toFixed(1)}%`
+        : `${result.confidence.toFixed(1)}%`;
 
   const statusLabel = useMemo(() => {
     if (!report) return "unavailable";
@@ -104,10 +110,10 @@ export default function PatientReportPage() {
           <div className="rounded-lg border p-4">
             <div className="text-sm text-muted-foreground">Result</div>
             <div className="mt-1 text-xl font-bold">
-              {result?.prediction === "stroke" ? "Stroke detected" : result?.prediction === "normal" ? "Normal" : "Pending"}
+              {result?.prediction || "Pending"}
             </div>
-            {typeof result?.confidence === "number" && (
-              <div className="text-sm text-muted-foreground">Confidence: {result.confidence}%</div>
+            {confidence && (
+              <div className="text-sm text-muted-foreground">Confidence: {confidence}</div>
             )}
           </div>
 

@@ -28,6 +28,13 @@ import {
 
 // Base API URL - points to backend server
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api/v1";
+const ASSET_BASE_URL = API_BASE_URL.replace(/\/api\/v1$/, "");
+
+export const assetUrl = (url?: string) => {
+  if (!url) return "/placeholder.svg";
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${ASSET_BASE_URL}${url.startsWith("/") ? url : `/${url}`}`;
+};
 
 // Simulated token storage
 let currentToken: string | null = localStorage.getItem("auth_token");
@@ -273,48 +280,39 @@ export const scanService = {
 
 export const patientService = {
   async getPatients(search?: string): Promise<ApiResponse<PaginatedResponse<Patient>>> {
-    await simulateApiDelay(500);
+    const params = new URLSearchParams();
+    if (search) params.append("search", search);
+    params.append("page", "1");
+    params.append("pageSize", "100"); // Retrieving 100 for simplicity in the demo
 
-    let patients = [...mockPatients];
+    const response = await fetch(`${API_BASE_URL}/patients?${params.toString()}`, {
+      method: "GET",
+      headers: getAuthHeaders(),
+    });
 
-    if (search) {
-      const s = search.toLowerCase();
-      patients = patients.filter(
-        (p) =>
-          p.firstName.toLowerCase().includes(s) ||
-          p.lastName.toLowerCase().includes(s) ||
-          p.patientId.toLowerCase().includes(s)
-      );
-    }
-
-    return {
-      success: true,
-      data: {
-        data: patients,
-        total: patients.length,
-        page: 1,
-        pageSize: 10,
-        totalPages: Math.ceil(patients.length / 10),
-      },
-    };
+    return handleResponse<PaginatedResponse<Patient>>(response);
   },
 
-  async getPatientById(id: string): Promise<ApiResponse<Patient>> {
-    await simulateApiDelay(300);
+  async getPatientById(id: string): Promise<ApiResponse<Patient & { scans?: CTScan[], reports?: DiagnosticReport[] }>> {
+    const response = await fetch(`${API_BASE_URL}/patients/${id}`, {
+      method: "GET",
+      headers: getAuthHeaders(),
+    });
 
-    const patient = mockPatients.find((p) => p.id === id);
-    if (!patient) {
-      throw new Error("Patient not found");
-    }
-
-    return { success: true, data: patient };
+    return handleResponse<Patient & { scans?: CTScan[], reports?: DiagnosticReport[] }>(response);
   },
 
   async getPatientScans(patientId: string): Promise<ApiResponse<CTScan[]>> {
-    await simulateApiDelay(400);
-
-    const scans = mockScans.filter((s) => s.patientId === patientId);
-    return { success: true, data: scans };
+    const params = new URLSearchParams();
+    params.append("patientId", patientId);
+    
+    const response = await fetch(`${API_BASE_URL}/scans?${params.toString()}`, {
+      method: "GET",
+      headers: getAuthHeaders(),
+    });
+    
+    const paginatedResponse = await handleResponse<PaginatedResponse<CTScan>>(response);
+    return { success: true, data: paginatedResponse.data.data };
   },
 };
 
@@ -413,9 +411,12 @@ export const modelService = {
 };
 
 export const predictionService = {
-  async predict(image: File): Promise<ApiResponse<PredictionResponse>> {
+  async predict(image: File, patientId?: string): Promise<ApiResponse<PredictionResponse>> {
     const formData = new FormData();
     formData.append("image", image);
+    if (patientId) {
+      formData.append("patientId", patientId);
+    }
 
     const token = localStorage.getItem("auth_token");
     const headers: Record<string, string> = {};

@@ -10,3 +10,17 @@ coverage/
 .DS_Store
 *.pem
 node_modules
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Logs
+*.log
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep

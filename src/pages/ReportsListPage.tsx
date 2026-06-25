@@ -26,6 +26,7 @@ export default function ReportsListPage() {
   });
 
   const reports = reportsData?.data || [];
+  const scanPath = (report: DiagnosticReport) => `/doctor/report/${report.scan?.id || report.scanId}`;
 
   const getStatusBadge = (status: DiagnosticReport["status"]) => {
     const variants: Record<DiagnosticReport["status"], { variant: "default" | "secondary" | "outline"; label: string }> = {
@@ -77,7 +78,7 @@ export default function ReportsListPage() {
           <p className="text-muted-foreground">View and manage all diagnostic reports</p>
         </div>
         <Button asChild>
-          <Link to="/upload">
+          <Link to="/doctor/upload">
             <Plus className="mr-2 h-4 w-4" /> New Scan
           </Link>
         </Button>
@@ -92,7 +93,7 @@ export default function ReportsListPage() {
               Generate reports from analyzed scans to see them here.
             </p>
             <Button asChild>
-              <Link to="/history">View Scan History</Link>
+              <Link to="/doctor/history">View Scan History</Link>
             </Button>
           </CardContent>
         </Card>
@@ -135,7 +136,7 @@ export default function ReportsListPage() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button asChild variant="outline" size="sm">
-                          <Link to={`/report/${report.scanId}`}>
+                          <Link to={scanPath(report)}>
                             <Eye className="h-3 w-3" />
                           </Link>
                         </Button>

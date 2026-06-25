@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { scanService, reportService } from "@/services/api";
+import { assetUrl, scanService, reportService } from "@/services/api";
 import { ArrowLeft, FileText, Image as ImageIcon, Loader2 } from "lucide-react";
 
 export default function PatientScanDetailPage() {
@@ -68,6 +68,15 @@ export default function PatientScanDetailPage() {
 
   const result = resultQuery.data?.data;
   const hasResult = !!result;
+  const originalImage = assetUrl(scan.imageUrls?.[0]);
+  const heatmapImage = assetUrl(result?.heatmapUrl || scan.imageUrls?.[0]);
+  const overlayImage = assetUrl(result?.overlayUrl || scan.imageUrls?.[0]);
+  const confidence =
+    result?.confidence == null
+      ? "-"
+      : result.confidence <= 1
+        ? `${(result.confidence * 100).toFixed(1)}%`
+        : `${result.confidence.toFixed(1)}%`;
 
   return (
     <div className="space-y-6">
@@ -133,10 +142,10 @@ export default function PatientScanDetailPage() {
               <div className="rounded-lg border p-4">
                 <div className="text-sm text-muted-foreground">Preliminary classification</div>
                 <div className="mt-1 text-2xl font-bold">
-                  {result.prediction === "stroke" ? "Stroke detected" : "Normal"}
+                  {result.prediction}
                 </div>
                 <div className="mt-1 text-sm text-muted-foreground">
-                  Confidence: {result.confidence}%
+                  Confidence: {confidence}
                 </div>
                 <div className="mt-3 text-xs text-muted-foreground">
                   Final diagnosis is confirmed by your clinician and shown in the report.
@@ -160,17 +169,17 @@ export default function PatientScanDetailPage() {
                 </TabsList>
                 <TabsContent value="original" className="mt-4">
                   <div className="overflow-hidden rounded-lg border bg-muted">
-                    <img src={"/placeholder.svg"} alt="Original" className="w-full object-contain" />
+                    <img src={originalImage} alt="Original" className="w-full object-contain" />
                   </div>
                 </TabsContent>
                 <TabsContent value="heatmap" className="mt-4">
                   <div className="overflow-hidden rounded-lg border bg-muted">
-                    <img src={result.heatmapUrl || "/placeholder.svg"} alt="Heatmap" className="w-full object-contain" />
+                    <img src={heatmapImage} alt="Heatmap" className="w-full object-contain" />
                   </div>
                 </TabsContent>
                 <TabsContent value="overlay" className="mt-4">
                   <div className="overflow-hidden rounded-lg border bg-muted">
-                    <img src={result.overlayUrl || "/placeholder.svg"} alt="Overlay" className="w-full object-contain" />
+                    <img src={overlayImage} alt="Overlay" className="w-full object-contain" />
                   </div>
                 </TabsContent>
               </Tabs>

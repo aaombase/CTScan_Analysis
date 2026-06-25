@@ -25,6 +25,7 @@ import XAIVisualizationPage from "@/pages/XAIVisualizationPage";
 import ReportsListPage from "@/pages/ReportsListPage";
 import ReportPage from "@/pages/ReportPage";
 import ScanHistoryPage from "@/pages/ScanHistoryPage";
+import DoctorPatientDetailPage from "@/pages/DoctorPatientDetailPage";
 import ArchitecturePage from "@/pages/ArchitecturePage";
 import ResearchPage from "@/pages/ResearchPage";
 import CompliancePage from "@/pages/CompliancePage";
@@ -58,6 +59,7 @@ const App = () => (
                 <Route path="/doctor/reports" element={<ReportsListPage />} />
                 <Route path="/doctor/report/:scanId" element={<ReportPage />} />
                 <Route path="/doctor/history" element={<ScanHistoryPage />} />
+                <Route path="/doctor/patients/:id" element={<DoctorPatientDetailPage />} />
                 <Route path="/doctor/architecture" element={<ArchitecturePage />} />
                 <Route path="/doctor/research" element={<ResearchPage />} />
                 <Route path="/doctor/compliance" element={<CompliancePage />} />
@@ -79,11 +81,11 @@ const App = () => (
                 <Route path="/dashboard" element={<Navigate to="/doctor/dashboard" replace />} />
                 <Route path="/upload" element={<Navigate to="/doctor/upload" replace />} />
                 <Route path="/results" element={<Navigate to="/doctor/results" replace />} />
-                <Route path="/results/:scanId" element={<Navigate to="/doctor/results/:scanId" replace />} />
+                <Route path="/results/:scanId" element={<ResultsPage />} />
                 <Route path="/xai" element={<Navigate to="/doctor/xai" replace />} />
-                <Route path="/xai/:scanId" element={<Navigate to="/doctor/xai/:scanId" replace />} />
+                <Route path="/xai/:scanId" element={<XAIVisualizationPage />} />
                 <Route path="/reports" element={<Navigate to="/doctor/reports" replace />} />
-                <Route path="/report/:scanId" element={<Navigate to="/doctor/report/:scanId" replace />} />
+                <Route path="/report/:scanId" element={<ReportPage />} />
                 <Route path="/history" element={<Navigate to="/doctor/history" replace />} />
                 <Route path="/architecture" element={<Navigate to="/doctor/architecture" replace />} />
                 <Route path="/research" element={<Navigate to="/doctor/research" replace />} />

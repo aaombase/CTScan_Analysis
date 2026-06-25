@@ -77,7 +77,9 @@ export default function PatientReportsPage() {
             </div>
 
             <div className="grid gap-4">
-                {reports.map((report: any) => (
+                {reports.map((report: any) => {
+                    const scanId = report.scan?.id || report.scanId;
+                    return (
                     <Card key={report.id}>
                         <CardHeader className="pb-2">
                             <div className="flex items-center justify-between">
@@ -100,10 +102,10 @@ export default function PatientReportsPage() {
                                         <Calendar className="h-4 w-4" />
                                         {new Date(report.generatedAt).toLocaleDateString()}
                                     </span>
-                                    <span>Scan: {report.scanId}</span>
+                                    <span>Scan: {scanId}</span>
                                 </div>
                                 <Button asChild variant="outline" size="sm">
-                                    <Link to={`/patient/reports/${report.scanId}`}>
+                                    <Link to={`/patient/reports/${scanId}`}>
                                         <Eye className="mr-2 h-4 w-4" />
                                         View Report
                                     </Link>
@@ -111,7 +113,8 @@ export default function PatientReportsPage() {
                             </div>
                         </CardContent>
                     </Card>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );

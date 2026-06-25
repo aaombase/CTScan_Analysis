@@ -54,9 +54,9 @@ export default function DashboardPage() {
       color: "text-destructive",
     },
     {
-      title: "Pending",
-      value: stats?.pendingScans,
-      icon: Clock,
+      title: "Today's Scans",
+      value: stats?.todayScans,
+      icon: TrendingUp,
       color: "text-warning",
     },
   ];

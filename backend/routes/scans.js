@@ -1,20 +1,39 @@
 import express from "express";
 import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import { authenticateToken, requireRole } from "../middleware/auth.js";
-import { mockScans, mockPatients } from "../data/mockData.js";
+import Scan from "../models/Scan.js";
+import Patient from "../models/Patient.js";
+import AnalysisResult from "../models/AnalysisResult.js";
 
 const router = express.Router();
 
-// Configure multer for file uploads (memory storage for mock)
+// Configure disk storage for Multer
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = "uploads/";
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + "-" + uniqueSuffix + ext);
+  }
+});
+
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
 });
 
 /**
  * GET /api/v1/scans
- * List scans (role-based filtering)
+ * List scans (role-based filtering with database)
  */
 router.get("/", authenticateToken, async (req, res) => {
   try {
@@ -22,51 +41,115 @@ router.get("/", authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    let filteredScans = [...mockScans];
+    let filter = {};
 
     // Role-based filtering
     if (userRole === "patient") {
-      // Patients see only their own scans
-      const patient = req.user.patientId 
-        ? mockPatients.find((p) => p.id === req.user.patientId)
-        : mockPatients.find((p) => p.email === req.user.email);
-      if (patient) {
-        filteredScans = filteredScans.filter((s) => s.patientId === patient.id);
+      // Find patient record by patientId from token, or by user email
+      let patient = null;
+      if (req.user.patientId) {
+        patient = await Patient.findById(req.user.patientId);
       } else {
-        filteredScans = [];
+        patient = await Patient.findOne({ email: req.user.email.toLowerCase().trim() });
+      }
+
+      if (patient) {
+        filter.patientId = patient._id;
+      } else {
+        // Return empty result if no patient profile exists
+        return res.json({
+          success: true,
+          data: {
+            data: [],
+            total: 0,
+            page: parseInt(page),
+            pageSize: parseInt(pageSize),
+            totalPages: 0,
+          },
+        });
       }
     } else {
       // Doctors see scans they uploaded
-      filteredScans = filteredScans.filter((s) => s.uploadedBy === userId);
+      filter.uploadedBy = userId;
     }
 
-    // Apply filters
+    // Apply query filters
     if (status) {
-      filteredScans = filteredScans.filter((s) => s.status === status);
+      filter.status = status;
     }
     if (patientId) {
-      filteredScans = filteredScans.filter((s) => s.patientId === patientId);
+      filter.patientId = patientId;
     }
 
-    // Pagination
-    const startIndex = (parseInt(page) - 1) * parseInt(pageSize);
-    const endIndex = startIndex + parseInt(pageSize);
-    const paginatedScans = filteredScans.slice(startIndex, endIndex);
+    // Pagination & query execution
+    const limit = parseInt(pageSize);
+    const skip = (parseInt(page) - 1) * limit;
 
-    // Populate patient data
-    const scansWithPatient = paginatedScans.map((scan) => ({
-      ...scan,
-      patient: mockPatients.find((p) => p.id === scan.patientId),
-    }));
+    let scans;
+    let total;
+
+    // If search is provided, we need to search across populated patient fields
+    if (req.query.search) {
+      const searchRegex = new RegExp(req.query.search, 'i');
+      // Get matching patients first
+      const matchingPatients = await Patient.find({
+        $or: [
+          { firstName: searchRegex },
+          { lastName: searchRegex },
+          { patientId: searchRegex },
+        ]
+      }).select('_id');
+      const matchingPatientIds = matchingPatients.map(p => p._id);
+      filter.patientId = { $in: matchingPatientIds };
+    }
+
+    total = await Scan.countDocuments(filter);
+    scans = await Scan.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate("patientId");
+
+    // Query analysis results for these scans
+    const scanIds = scans.map(s => s._id);
+    let results = await AnalysisResult.find({ scanId: { $in: scanIds } });
+
+    // Filter by prediction result if requested
+    if (req.query.prediction) {
+      const matchingScanIds = results
+        .filter(r => r.prediction === req.query.prediction)
+        .map(r => r.scanId.toString());
+      scans = scans.filter(s => matchingScanIds.includes(s._id.toString()));
+      results = results.filter(r => r.prediction === req.query.prediction);
+      total = scans.length;
+    }
+
+    // Map Mongoose _id to id for frontend compatibility
+    const scansWithId = scans.map(scan => {
+      const scanObj = scan.toObject();
+      scanObj.id = scanObj._id;
+      if (scanObj.patientId && typeof scanObj.patientId === 'object') {
+        scanObj.patient = scanObj.patientId;
+        scanObj.patient.id = scanObj.patient._id;
+      }
+      
+      // Attach prediction result if exists - use toString() for ObjectId comparison
+      const result = results.find(r => r.scanId.toString() === scanObj._id.toString());
+      if (result) {
+        scanObj.result = result.toObject();
+        scanObj.result.id = result._id;
+      }
+      return scanObj;
+    });
 
     res.json({
       success: true,
       data: {
-        data: scansWithPatient,
-        total: filteredScans.length,
+        data: scansWithId,
+        total,
         page: parseInt(page),
-        pageSize: parseInt(pageSize),
-        totalPages: Math.ceil(filteredScans.length / parseInt(pageSize)),
+        pageSize: limit,
+        totalPages: Math.ceil(total / limit),
       },
     });
   } catch (error) {
@@ -88,7 +171,7 @@ router.get("/:id", authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const scan = mockScans.find((s) => s.id === id);
+    const scan = await Scan.findById(id).populate("patientId");
 
     if (!scan) {
       return res.status(404).json({
@@ -97,12 +180,19 @@ router.get("/:id", authenticateToken, async (req, res) => {
       });
     }
 
+    // Get the raw patientId string for access control comparison
+    const scanPatientId = typeof scan.patientId === 'object' ? scan.patientId._id : scan.patientId;
+
     // Role-based access control
     if (userRole === "patient") {
-      const patient = req.user.patientId 
-        ? mockPatients.find((p) => p.id === req.user.patientId)
-        : mockPatients.find((p) => p.email === req.user.email);
-      if (scan.patientId !== patient?.id) {
+      let patient = null;
+      if (req.user.patientId) {
+        patient = await Patient.findById(req.user.patientId);
+      } else {
+        patient = await Patient.findOne({ email: req.user.email.toLowerCase().trim() });
+      }
+
+      if (scanPatientId !== patient?._id) {
         return res.status(403).json({
           success: false,
           error: "Access denied",
@@ -117,14 +207,23 @@ router.get("/:id", authenticateToken, async (req, res) => {
       }
     }
 
-    const scanWithPatient = {
-      ...scan,
-      patient: mockPatients.find((p) => p.id === scan.patientId),
-    };
+    const scanObj = scan.toObject();
+    scanObj.id = scanObj._id;
+    if (scanObj.patientId && typeof scanObj.patientId === 'object') {
+      scanObj.patient = scanObj.patientId;
+      scanObj.patient.id = scanObj.patient._id;
+    }
+
+    // Fetch and attach result
+    const result = await AnalysisResult.findOne({ scanId: scanObj._id });
+    if (result) {
+      scanObj.result = result.toObject();
+      scanObj.result.id = result._id;
+    }
 
     res.json({
       success: true,
-      data: scanWithPatient,
+      data: scanObj,
     });
   } catch (error) {
     console.error("Get scan error:", error);
@@ -157,21 +256,22 @@ router.post(
       }
 
       // Determine patient for this upload
-      // - patient role: must upload for self (ignore any provided patientId)
-      // - doctor roles: must provide patientId explicitly
       let patientId = requestedPatientId;
       if (req.user.role === "patient") {
-        const patient =
-          req.user.patientId
-            ? mockPatients.find((p) => p.id === req.user.patientId)
-            : mockPatients.find((p) => p.email === req.user.email);
+        let patient = null;
+        if (req.user.patientId) {
+          patient = await Patient.findById(req.user.patientId);
+        } else {
+          patient = await Patient.findOne({ email: req.user.email.toLowerCase().trim() });
+        }
+
         if (!patient) {
           return res.status(400).json({
             success: false,
             error: "Patient profile not found for this account",
           });
         }
-        patientId = patient.id;
+        patientId = patient._id;
       } else {
         if (!patientId) {
           return res.status(400).json({
@@ -182,7 +282,7 @@ router.post(
       }
 
       // Verify patient exists
-      const patient = mockPatients.find((p) => p.id === patientId);
+      const patient = await Patient.findById(patientId);
       if (!patient) {
         return res.status(404).json({
           success: false,
@@ -190,38 +290,41 @@ router.post(
         });
       }
 
-      // Create scan record
-      const newScan = {
-        id: `scan_${uuidv4().split("-")[0]}`,
-        patientId,
+      // Create URLs for saved files
+      const imageUrls = files.map(file => `/uploads/${file.filename}`);
+      const thumbnailUrl = imageUrls[0] || "/placeholder.svg";
+
+      // Create scan record in database
+      const newScan = new Scan({
+        patientId: patient._id,
         uploadedBy: req.user.id,
         status: "pending",
-        imageUrls: files.map(() => "/placeholder.svg"), // In production, upload to storage
-        thumbnailUrl: "/placeholder.svg",
+        imageUrls,
+        thumbnailUrl,
         sliceCount: files.length,
         fileSize: files.reduce((acc, f) => acc + f.size, 0),
-        format: "DICOM",
-        scanDate: new Date().toISOString(),
-        uploadedAt: new Date().toISOString(),
+        format: path.extname(files[0].originalname).substring(1).toUpperCase() || "PNG",
+        scanDate: new Date(),
+        uploadedAt: new Date(),
         metadata: {
           modality: "CT",
           bodyPart: "HEAD",
           resolution: "512x512",
           sliceThickness: "5mm",
+          originalFileName: files[0].originalname,
         },
-      };
+      });
 
-      // Add to mock data (in production, save to database)
-      mockScans.push(newScan);
+      await newScan.save();
 
-      const scanWithPatient = {
-        ...newScan,
-        patient,
-      };
+      const scanObj = newScan.toObject();
+      scanObj.id = scanObj._id;
+      scanObj.patient = patient.toObject();
+      scanObj.patient.id = scanObj.patient._id;
 
       res.status(201).json({
         success: true,
-        data: scanWithPatient,
+        data: scanObj,
       });
     } catch (error) {
       console.error("Upload scan error:", error);

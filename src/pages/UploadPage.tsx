@@ -2,10 +2,13 @@ import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { predictionService, reportService } from "@/services/api";
-import { Upload, X, FileImage, Loader2, AlertCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { predictionService, reportService, patientService } from "@/services/api";
+import { Upload, X, FileImage, Loader2, AlertCircle, User, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { PredictionResponse } from "@/types";
+import type { PredictionResponse, Patient } from "@/types";
+import { useQuery } from "@tanstack/react-query";
 
 const LOW_CONFIDENCE_THRESHOLD = 0.5;
 
@@ -14,7 +17,17 @@ export default function UploadPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [patientSearch, setPatientSearch] = useState("");
+  const [showPatientList, setShowPatientList] = useState(false);
   const { toast } = useToast();
+
+  const { data: patientsData } = useQuery({
+    queryKey: ["patients-upload", patientSearch],
+    queryFn: () => patientService.getPatients(patientSearch || undefined),
+  });
+
+  const patients = patientsData?.data?.data || [];
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -37,12 +50,21 @@ export default function UploadPage() {
 
   const handleAnalyze = async () => {
     if (files.length === 0) return;
+
+    if (!selectedPatient) {
+      toast({
+        title: "Patient required",
+        description: "Please select a patient before uploading a scan.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     try {
       setAnalyzing(true);
       setPrediction(null);
       setProgress(45);
-      const result = await predictionService.predict(files[0]);
+      const result = await predictionService.predict(files[0], selectedPatient.id);
       setProgress(100);
       setPrediction(result.data);
 
@@ -96,9 +118,75 @@ export default function UploadPage() {
         <p className="text-muted-foreground">Upload one brain CT slice for AI-powered classification</p>
       </div>
 
+      {/* Patient Selector */}
       <Card>
         <CardHeader>
-          <CardTitle>Upload Images</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <User className="h-5 w-5" />
+            Select Patient
+          </CardTitle>
+          <CardDescription>Search and select the patient this scan belongs to.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {selectedPatient ? (
+            <div className="flex items-center justify-between rounded-lg border border-primary/40 bg-primary/5 p-3">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                  {selectedPatient.firstName.charAt(0)}{selectedPatient.lastName.charAt(0)}
+                </div>
+                <div>
+                  <div className="font-medium">{selectedPatient.firstName} {selectedPatient.lastName}</div>
+                  <div className="text-xs text-muted-foreground">ID: {selectedPatient.patientId}</div>
+                </div>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedPatient(null)}>Change</Button>
+            </div>
+          ) : (
+            <div className="relative">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search patient by name or ID..."
+                  value={patientSearch}
+                  className="pl-9"
+                  onChange={(e) => {
+                    setPatientSearch(e.target.value);
+                    setShowPatientList(true);
+                  }}
+                  onFocus={() => setShowPatientList(true)}
+                />
+              </div>
+              {showPatientList && patients.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full rounded-lg border bg-popover shadow-lg max-h-52 overflow-auto">
+                  {patients.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted transition-colors"
+                      onClick={() => {
+                        setSelectedPatient(p);
+                        setShowPatientList(false);
+                        setPatientSearch("");
+                      }}
+                    >
+                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
+                        {p.firstName.charAt(0)}{p.lastName.charAt(0)}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium">{p.firstName} {p.lastName}</div>
+                        <div className="text-xs text-muted-foreground">{p.patientId} · {p.gender}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Upload Image</CardTitle>
           <CardDescription>Supports a single PNG or JPG image. DICOM support can be added later.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -183,7 +271,12 @@ export default function UploadPage() {
             <p>This AI tool is for clinical decision support only. All results must be verified by a qualified radiologist.</p>
           </div>
 
-          <Button onClick={handleAnalyze} disabled={files.length === 0 || analyzing} className="w-full" size="lg">
+          <Button
+            onClick={handleAnalyze}
+            disabled={files.length === 0 || analyzing || !selectedPatient}
+            className="w-full"
+            size="lg"
+          >
             {analyzing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing...</> : "Analyze Scan"}
           </Button>
         </CardContent>

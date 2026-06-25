@@ -38,9 +38,9 @@ export default function PatientDashboardPage() {
       color: "text-success",
     },
     {
-      title: "Pending",
-      value: stats?.pendingReports,
-      icon: Clock,
+      title: "Total Scans",
+      value: scans.length,
+      icon: Upload,
       color: "text-warning",
     },
   ];

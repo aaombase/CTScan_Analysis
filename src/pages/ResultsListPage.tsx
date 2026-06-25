@@ -40,7 +40,7 @@ export default function ResultsListPage() {
           <p className="text-muted-foreground">View all completed scan analyses</p>
         </div>
         <Button asChild>
-          <Link to="/upload">New Scan</Link>
+          <Link to="/doctor/upload">New Scan</Link>
         </Button>
       </div>
 
@@ -53,17 +53,16 @@ export default function ResultsListPage() {
               Upload and analyze CT scans to see results here.
             </p>
             <Button asChild>
-              <Link to="/upload">Upload Your First Scan</Link>
+              <Link to="/doctor/upload">Upload Your First Scan</Link>
             </Button>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {analyzedScans.map((scan) => {
-            // In a real app, we'd fetch the result for each scan
-            // For mock, we'll use scan status as indicator
-            const isStroke = scan.status === "completed" && Math.random() > 0.5;
-            const confidence = 85 + Math.random() * 12;
+            const prediction = scan.result?.prediction || "normal";
+            const isStroke = prediction === "stroke" || prediction === "bleeding" || prediction === "ischemia";
+            const confidence = scan.result?.confidence || 0;
 
             return (
               <Card
@@ -75,10 +74,10 @@ export default function ResultsListPage() {
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <Badge variant={isStroke ? "destructive" : "default"}>
-                      {isStroke ? "STROKE DETECTED" : "NORMAL"}
+                      {prediction.toUpperCase()}
                     </Badge>
                     <span className="text-sm text-muted-foreground">
-                      {confidence.toFixed(1)}% confidence
+                      {confidence > 0 ? `${confidence.toFixed(1)}% confidence` : "Analyzing..."}
                     </span>
                   </div>
                   <CardTitle className="text-lg mt-2">
@@ -112,12 +111,12 @@ export default function ResultsListPage() {
                   </div>
                   <div className="flex gap-2">
                     <Button asChild variant="outline" size="sm" className="flex-1">
-                      <Link to={`/xai/${scan.id}`}>
+                      <Link to={`/doctor/xai/${scan.id}`}>
                         <Eye className="mr-1 h-3 w-3" /> XAI
                       </Link>
                     </Button>
                     <Button asChild size="sm" className="flex-1">
-                      <Link to={`/report/${scan.id}`}>
+                      <Link to={`/doctor/report/${scan.id}`}>
                         <FileText className="mr-1 h-3 w-3" /> Report
                       </Link>
                     </Button>

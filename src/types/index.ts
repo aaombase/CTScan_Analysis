@@ -72,6 +72,7 @@ export interface CTScan {
   uploadedAt: string;
   analyzedAt?: string;
   metadata: ScanMetadata;
+  result?: AnalysisResult;
 }
 
 export interface ScanMetadata {

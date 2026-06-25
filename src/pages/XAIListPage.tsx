@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { scanService } from "@/services/api";
+import { scanService, assetUrl } from "@/services/api";
 import { Brain, Eye, AlertTriangle, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 
@@ -80,31 +80,31 @@ export default function XAIListPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {analyzedScans.map((scan) => {
-            // In a real app, we'd fetch the result for each scan
-            const isStroke = scan.status === "completed" && Math.random() > 0.5;
-            const confidence = 85 + Math.random() * 12;
+            const prediction = scan.result?.prediction || "normal";
+            const isStroke = prediction === "stroke" || prediction === "bleeding" || prediction === "ischemia";
+            const confidence = scan.result?.confidence || 0;
 
             return (
               <Card key={scan.id} className="overflow-hidden group hover:shadow-lg transition-all">
                 {/* Placeholder Image */}
                 <div className="relative h-40 bg-muted">
                   <img
-                    src={scan.thumbnailUrl || "/placeholder.svg"}
+                    src={assetUrl(scan.thumbnailUrl)}
                     alt="Scan thumbnail"
                     className="h-full w-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                   <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
                     <Badge variant={isStroke ? "destructive" : "default"}>
-                      {isStroke ? "STROKE" : "NORMAL"}
+                      {prediction.toUpperCase()}
                     </Badge>
                     <span className="text-xs text-white font-medium">
-                      {confidence.toFixed(1)}%
+                      {confidence > 0 ? `${confidence.toFixed(1)}%` : "0.0%"}
                     </span>
                   </div>
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button asChild variant="secondary" size="sm">
-                      <Link to={`/xai/${scan.id}`}>
+                      <Link to={`/doctor/xai/${scan.id}`}>
                         <Eye className="mr-2 h-4 w-4" /> View Heatmap
                       </Link>
                     </Button>
