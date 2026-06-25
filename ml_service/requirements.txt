@@ -5,3 +5,4 @@ pillow==11.0.0
 torch
 torchvision
 open_clip_torch==2.26.1
+opencv-python-headless==4.10.0.84

@@ -47,9 +47,6 @@ const doctorNavItems: NavItem[] = [
 ];
 
 const doctorSecondaryNavItems: NavItem[] = [
-  { title: "XAI Visualization", href: "/doctor/xai", icon: Brain, roles: ["doctor", "radiologist", "admin"] },
-  { title: "Architecture", href: "/doctor/architecture", icon: Network, roles: ["doctor", "radiologist", "admin"] },
-  { title: "Research & Model", href: "/doctor/research", icon: Activity, roles: ["doctor", "radiologist", "admin"] },
   { title: "Compliance", href: "/doctor/compliance", icon: Shield, roles: ["doctor", "radiologist", "admin"] },
 ];
 

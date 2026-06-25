@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,8 +14,6 @@ import {
   AlertTriangle,
   Clock,
   Upload,
-  TrendingUp,
-  Brain,
   Search,
   Users,
   ChevronRight
@@ -58,9 +56,9 @@ export default function DoctorDashboardPage() {
       color: "text-destructive",
     },
     {
-      title: "Today's Scans",
-      value: stats?.todayScans,
-      icon: TrendingUp,
+      title: "Pending Scans",
+      value: stats?.pendingScans,
+      icon: Clock,
       color: "text-warning",
     },
   ];
@@ -180,29 +178,6 @@ export default function DoctorDashboardPage() {
 
         {/* Right Column: Model Info & Recent Scans */}
         <div className="md:col-span-1 space-y-6">
-          <Card className="border-primary/20 bg-primary/5">
-            <CardHeader className="flex flex-col items-center gap-2 text-center pb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary">
-                <Brain className="h-6 w-6 text-primary-foreground" />
-              </div>
-              <div>
-                <CardTitle className="text-lg">AI Analysis Model</CardTitle>
-                <CardDescription>Version 2.0.0</CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent>
-               <div className="flex justify-between text-center px-4">
-                <div>
-                  <div className="text-2xl font-bold text-primary">96.15%</div>
-                  <div className="text-xs text-muted-foreground">Accuracy</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-success">94.8%</div>
-                  <div className="text-xs text-muted-foreground">Sensitivity</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
 
           <Card>  
             <CardHeader className="pb-3">

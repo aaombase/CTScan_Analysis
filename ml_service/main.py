@@ -124,3 +124,6 @@ async def predict(image: UploadFile = File(...)):
         },
         "processing_time_ms": round((time.perf_counter() - started) * 1000, 2),
     }
+
+
+

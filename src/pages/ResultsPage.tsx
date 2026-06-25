@@ -91,7 +91,6 @@ export default function ResultsPage() {
       </Card>
 
       <div className="flex gap-4">
-        <Button asChild variant="outline"><Link to={`/doctor/xai/${targetScanId}`}><Eye className="mr-2 h-4 w-4" /> View XAI</Link></Button>
         <Button asChild><Link to={`/doctor/report/${targetScanId}`}><FileText className="mr-2 h-4 w-4" /> View Report</Link></Button>
       </div>
 
@@ -101,3 +100,4 @@ export default function ResultsPage() {
     </div>
   );
 }
+

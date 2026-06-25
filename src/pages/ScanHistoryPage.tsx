@@ -184,14 +184,6 @@ export default function ScanHistoryPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => navigate(`/doctor/xai/${scan.id}`)}
-                          disabled={scan.status !== "completed"}
-                        >
-                          <Brain className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
                           onClick={() => navigate(`/doctor/report/${scan.id}`)}
                           disabled={scan.status !== "completed"}
                         >
@@ -209,3 +201,4 @@ export default function ScanHistoryPage() {
     </div>
   );
 }
+

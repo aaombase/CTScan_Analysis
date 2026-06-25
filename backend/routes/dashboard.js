@@ -79,7 +79,7 @@ router.get("/stats", authenticateToken, async (req, res) => {
     const analyzedScansCount = await AnalysisResult.countDocuments({ scanId: { $in: doctorScanIds } });
     const positiveStrokeCasesCount = await AnalysisResult.countDocuments({ 
       scanId: { $in: doctorScanIds }, 
-      prediction: "stroke" 
+      prediction: { $in: ["Bleeding", "Ischemia", "bleeding", "ischemia", "stroke"] } 
     });
     const pendingScansCount = await Scan.countDocuments({ 
       uploadedBy: userId, 

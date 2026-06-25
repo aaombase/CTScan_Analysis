@@ -110,11 +110,7 @@ export default function ResultsListPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button asChild variant="outline" size="sm" className="flex-1">
-                      <Link to={`/doctor/xai/${scan.id}`}>
-                        <Eye className="mr-1 h-3 w-3" /> XAI
-                      </Link>
-                    </Button>
+                    
                     <Button asChild size="sm" className="flex-1">
                       <Link to={`/doctor/report/${scan.id}`}>
                         <FileText className="mr-1 h-3 w-3" /> Report
@@ -130,3 +126,4 @@ export default function ResultsListPage() {
     </div>
   );
 }
+
